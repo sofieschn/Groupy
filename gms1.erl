@@ -1,6 +1,6 @@
 % group membership service 1
 -module(gms1).
--export([leader/4, broadcast/3, slave/5, start/2, init/3]).
+-export([leader/4, broadcast/3, slave/5, start/1, init/2, start/2, init/3]).
 
 %%%%% LEADER NODE START AND INIT %%%%%
 
@@ -20,8 +20,18 @@ init(Id, Master) ->
 
 %%% Starting a node that joins an existing group (slave) %%%
 start(Id, Grp) ->
-    Self = self(),
-    {ok, spawn_link(fun() -> init(Id, Grp, Self) end)}.
+    %%Self = self(),
+    % Spawn a new application layer (Master) process for each joining node
+    Master = spawn(fun() -> application_process() end),
+    {ok, spawn_link(fun() -> init(Id, Grp, Master) end)}.
+
+%% starts an application process for each started node. They all get unique processIDs
+application_process() ->
+    receive
+        % Handle messages from the group process
+        Message ->
+            application_process()
+    end.
 
 %%% Initialization for a joining node %%%
 init(Id, Grp, Master) ->
@@ -30,11 +40,12 @@ init(Id, Grp, Master) ->
     Grp ! {join, Master, Self},
     % Wait for the view message from the leader
     receive
-        {view, [Leader | Slaves], Group} ->
+        {view, [Leader | NewSlavesList], NewGroup} ->
+            io:format("Slave ~p received new view: Leader: ~p, Slaves: ~p, Group: ~p~n",[Id, Leader, NewSlavesList, NewGroup]),  % Print new group view
             % Inform the application layer of the updated view
-            Master ! {view, Group},
+            Master ! {view, NewGroup},
             % Start the slave process with the received leader, slaves, and group
-            slave(Id, Master, Leader, Slaves, Group)
+            slave(Id, Master, Leader, NewSlavesList, NewGroup)
     end.
 
 leader(Id, Master, Slaves, Group) ->
@@ -71,6 +82,7 @@ broadcast(_Id, _Message, []) ->
     ok;
 % Recursive case, broadcasting to each slave
 broadcast(Id, Message, [Slave|Rest]) ->
+    io:format("Broadcasting message ~p to slave ~p~n", [Message, Slave]),  % Log broadcast messages
     Slave ! Message,
     % keep calling broadcast with the rest of the list
     broadcast(Id, Message, Rest).
@@ -80,6 +92,7 @@ slave(Id, Master, Leader, Slaves, Group) ->
     receive
         % Handle multicast message from the application layer or another node
         {mcast, Message} ->
+            io:format("Slave ~p forwarding multicast message to leader~n", [Id]),  % Log when forwarding multicast
             % Forward the multicast message to the Leader
             Leader ! {mcast, Message},
             % Continue the slave loop with the same state
@@ -87,6 +100,7 @@ slave(Id, Master, Leader, Slaves, Group) ->
 
         % Handle a join request for a new node
         {join, Work, Peer} ->
+            io:format("Slave ~p forwarding join request to leader~n", [Id]),  % Log when forwarding join request
             % Forward the join request to the Leader
             Leader ! {join, Work, Peer},
             % Continue the slave loop with the same state
@@ -94,6 +108,7 @@ slave(Id, Master, Leader, Slaves, Group) ->
 
         % Handle a regular message (from the leader)
         {msg, Message} ->
+            io:format("Slave ~p received message from leader: ~p~n", [Id, Message]),  % Log when receiving message from leader
             % Forward the message to the application layer (Master)
             Master ! Message,
             % Continue the slave loop with the same state
@@ -101,6 +116,7 @@ slave(Id, Master, Leader, Slaves, Group) ->
 
         % Handle a new view update (when group membership changes)
         {view, [Leader|NewSlavesList], NewGroup} ->
+            io:format("Slave ~p received new view: Leader: ~p, Slaves: ~p, Group: ~p~n",[Id, Leader, NewSlavesList, NewGroup]),  % Log new group view
             % Send the new view of the group to the application layer (Master)
             Master ! {view, NewGroup},
             % Update the slave's local state with the new Leader, Slaves list, and Group
