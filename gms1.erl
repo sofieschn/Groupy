@@ -1,6 +1,41 @@
 % group membership service 1
 -module(gms1).
--export([leader/4, broadcast/3, slave/5, start/1, init/3]).
+-export([leader/4, broadcast/3, slave/5, start/2, init/3]).
+
+%%%%% LEADER NODE START AND INIT %%%%%
+
+%%% Starting the first node (leader) 
+%%% Starting the first node (leader) %%%
+start(Id) ->
+    Self = self(),
+    {ok, spawn_link(fun() -> init(Id, Self) end)}.
+
+%%% Initialization for the first node %%%
+init(Id, Master) ->
+    % The first node automatically becomes the leader
+    leader(Id, Master, [], [Master]).
+
+
+%%%%% JOINING NODE START AND INIT %%%%%
+
+%%% Starting a node that joins an existing group (slave) %%%
+start(Id, Grp) ->
+    Self = self(),
+    {ok, spawn_link(fun() -> init(Id, Grp, Self) end)}.
+
+%%% Initialization for a joining node %%%
+init(Id, Grp, Master) ->
+    Self = self(),
+    % Send a join request to any existing node in the group
+    Grp ! {join, Master, Self},
+    % Wait for the view message from the leader
+    receive
+        {view, [Leader | Slaves], Group} ->
+            % Inform the application layer of the updated view
+            Master ! {view, Group},
+            % Start the slave process with the received leader, slaves, and group
+            slave(Id, Master, Leader, Slaves, Group)
+    end.
 
 leader(Id, Master, Slaves, Group) ->
     receive
@@ -76,17 +111,4 @@ slave(Id, Master, Leader, Slaves, Group) ->
             ok
     end.
 
-
-
-start(Id, Group) ->
-    Self = self(),
-    {ok, spawn_link(fun()-> init(Id, Group, Self) end)}.
-init(Id, Group, Master) ->
-    Self = self(),
-    Group ! {join, Master, Self},
-    receive
-        {view, [Leader|Slaves], Group} ->
-            Master ! {view, Group},
-            slave(Id, Master, Leader, Slaves, Group)
-end.
 
