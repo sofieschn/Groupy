@@ -36,6 +36,7 @@ application_process() ->
 %%% Initialization for a joining node %%%
 init(Id, Grp, Master) ->
     Self = self(),
+    
     % Send a join request to any existing node in the group
     Grp ! {join, Master, Self},
     % Wait for the view message from the leader
@@ -89,6 +90,7 @@ broadcast(Id, Message, [Slave|Rest]) ->
 
 
 slave(Id, Master, Leader, Slaves, Group) ->
+
     receive
         % Handle multicast message from the application layer or another node
         {mcast, Message} ->
