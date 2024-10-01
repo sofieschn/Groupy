@@ -1,7 +1,7 @@
 % group membership service 2
 -module(gms3).
 -export([leader/5, broadcast/3, slave/7, start/1, init_leader/3, start/2, init/3, crash/1]).
-- define(arghh, 1000).
+- define(arghh, 100000).
 - define(timeout, 2000).
 
 %%%%% LEADER NODE START AND INIT %%%%%
@@ -30,12 +30,11 @@ start(Id, Group) ->
 %%% Initialization for a joining node %%%
 init(Id, Grp, Master) ->
 	Self = self(),
-
 	%% We need to send a {join, Master, self()} message to a node in the group and wait for an invitation.
-	Grp ! {join, Master, Self},
+	Grp ! {join, Self, Self},
 	receive
 		%% The invitation is delivered as a view message containing everything we need to know.
-		{view, N, [Leader|Slaves], Group} ->
+		{view, MessageNumber, [Leader|Slaves], Group} ->
 			Master ! {view, Group},
 
 			%% The only node that will be monitored is the leader
@@ -43,7 +42,7 @@ init(Id, Grp, Master) ->
 
 			%% This process will be a slave
 			%% {view, [Leader|Slaves], Group} is the last message received, so we call slave with this message
-			slave(Id, Master, Leader, N+1, {view, N, [Leader|Slaves], Group}, Slaves, Group)
+			slave(Id, Master, Leader, MessageNumber+1, {view, MessageNumber, [Leader|Slaves], Group}, Slaves, Group)
 
 	%% Since the leader can crash it could be that a node that wants to join the group will never receive a reply.
 	%% Therefore, we only wait a certain amount of time for a reponse
@@ -78,8 +77,7 @@ leader(Id, Master, MessageNumber, Slaves, Group) ->
             % recursively call the leader function to keep waiting for new updates
             leader(Id, Master, MessageNumber+1, NewSlavesList, NewGroup);
         stop ->
-            io:format("Leader ~p is stopping~n", [Id]),
-            exit(normal)
+            ok
 
     end. 
 
