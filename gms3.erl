@@ -106,12 +106,17 @@ slave(Id, Master, Leader, MessageNumber, LastMessage, Slaves, Group) ->
             slave(Id, Master, Leader, MessageNumber, LastMessage, Slaves, Group);
 
         % Handle a join request for a new node
-        {join, Work, Peer} ->
-            io:format("Slave ~p forwarding join request to leader~n", [Id]),  % Log when forwarding join request
-            % Forward the join request to the Leader
-            Leader ! {join, Work, Peer},
-            % Continue the slave loop with the same state
-            slave(Id, Master, Leader, MessageNumber, LastMessage, Slaves, Group);
+%%% Join Process - Updates the leader and other slaves with the new node %%%
+        {join, NewWork, NewSlave} ->
+            % Add the new slave to the list of slaves (end of list)
+            NewSlavesList = lists:append(Slaves, [NewSlave]),
+            % Add the new application process to Group 
+            NewGroup = lists:append(Group, [NewWork]),
+            % Broadcast the new view to all slaves
+            broadcast(Id, {view, MessageNumber, [self() | NewSlavesList], NewGroup}, NewSlavesList),
+            % Update its own view
+            Master ! {view, NewGroup},
+            leader(Id, Master, MessageNumber + 1, NewSlavesList, NewGroup);
 
         % Handle a regular message (from the leader)
         {msg, MessageNumber, Message} ->
@@ -121,10 +126,9 @@ slave(Id, Master, Leader, MessageNumber, LastMessage, Slaves, Group) ->
             % Continue the slave loop with the same state
             slave(Id, Master, Leader, MessageNumber+1, {msg, MessageNumber, Message}, Slaves, Group);
 
-        %% Since this message has a lower count, it is old and can be discarded
-		%% Therefor, we do not increment N nor do we add the message as last message
         % Discard duplicate or old messages (those with a lower sequence number)
         {msg, ReceivedNumber, _} when ReceivedNumber < MessageNumber ->
+            io:format("Slave ~p ignoring message with old sequence number: ~p (Expected: ~p)~n", [Id, ReceivedNumber, MessageNumber]),
             slave(Id, Master, Leader, MessageNumber, LastMessage, Slaves, Group);
 
         % Handle a new view update (when group membership changes)
@@ -134,12 +138,14 @@ slave(Id, Master, Leader, MessageNumber, LastMessage, Slaves, Group) ->
             Master ! {view, NewGroup},
             % Update the slave's local state with the new Leader, Slaves list, and Group
             % call the slave function with the incremented messagenumber and updated last message
-            slave(Id, Master, Leader, MessageNumber+1, {view, MessageNumber, [Leader|NewSlavesList], NewGroup}, Slaves, Group);
+            slave(Id, Master, Leader, MessageNumber+1, {view, MessageNumber, [Leader|NewSlavesList], NewGroup}, NewSlavesList, NewGroup);
 
         {'DOWN', _Ref, process, Leader, _Reason} ->
             io:format("Slave ~p detected leader ~p crashed. Moving to election...~n", [Id, Leader]),
+            io:format("Current slaves list at crash detection: ~p~n", [Slaves]),
+        
             election(Id, Master, MessageNumber, LastMessage, Slaves, Group);
-
+            
         % Handle the stop signal (terminates the slave process)
         stop ->
             ok
@@ -160,10 +166,12 @@ broadcast(_Id, _Message, []) ->
     ok;
 % Recursive case, broadcasting to each slave
 broadcast(Id, Message, [Slave|Rest]) ->
+
     % simulating a crash by crashing a process by 1/100 chance
     lists:foreach(fun(Node) -> Node ! Message, crash(Id) end, [Slave|Rest]),
-    io:format("Broadcasting message ~p to slave ~p~n", [Message, Slave]),  % Log broadcast messages
+
     Slave ! Message,
+
     % keep calling broadcast with the rest of the list
     broadcast(Id, Message, Rest).
 
@@ -175,27 +183,28 @@ election(Id, Master, MessageNumber, LastMessage, Slaves, Group) ->
         % If the current node (Self) is the first in the Slaves list, it becomes the new leader
         [Self | Rest] ->
             io:format("Node ~p is becoming the new leader and resending the last message.~n", [Id]),
-
-            % Send the last message of the previous leader to self (leader) to trigger resending
-            Self ! LastMessage,
-
+           
+         % Send the updated view to all slaves, ensuring it includes all existing nodes
+            broadcast(Id, {view, MessageNumber, Slaves, Group}, Slaves),
+    
             % Inform the application layer (Master) about the new view
-            io:format("Informing Master of the new group view: ~p~n", [Group]),
             Master ! {view, Group}, 
 
-            % Transition the current node to the leader role
+            % Transition the current node to the leader role with the updated slaves list
             leader(Id, Master, MessageNumber + 1, Rest, Group);
 
         % If the current node is not the first in the Slaves list, monitor the new leader
-        [Leader | Rest] ->
-            io:format("Node ~p is electing new leader: ~p~n", [Id, Leader]),
+        [NewLeader | Rest] ->
+            io:format("Node ~p is electing new leader: ~p~n", [Id, NewLeader]),
+           
+         % Start monitoring the new leader to detect crashes
+            erlang:monitor(process, NewLeader),
 
-            % Start monitoring the new leader to detect crashes
-            erlang:monitor(process, Leader),
-
-            % Continue running as a slave with the new leader
-            slave(Id, Master, MessageNumber, LastMessage, Leader, Rest, Group)
+            % Continue running as a slave with the new leader, ensuring the full list of slaves is retained
+            slave(Id, Master, NewLeader, MessageNumber, LastMessage, Rest, Group)
     end.
+
+
 
 
 

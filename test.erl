@@ -52,10 +52,11 @@ test_leader_crash() ->
     io:format("Sending multicast from new leader (expected Slave1)...~n"),
     Slave1 ! {mcast, "Test Message 3"},
 
-    % Allow time for the new message to propagate
+    % Confirm that both Slave2 and the old Leader's replacement (Slave1) have received the message
     timer:sleep(1000),
-
+    
     io:format("Test leader crash and election completed.~n").
+
 
 %% Test 3: Leader sends messages to the slaves (multicast test)
 test_slave_message() ->

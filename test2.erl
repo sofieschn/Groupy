@@ -6,15 +6,15 @@ test_leader_rotation() ->
     io:format("Starting test_leader_rotation...~n"),
 
     % Step 1: Start Slave1 as the leader and add Slave2 and Slave3
-    {ok, Leader1} = gms3:start(slave1_id),  % Slave1 is the initial leader
-    {ok, Slave2} = gms3:start(slave2_id, Leader1),
-    {ok, Slave3} = gms3:start(slave3_id, Leader1),
+    {ok, Slave1} = gms3:start(slave1_id),  % Slave1 is the initial leader
+    {ok, Slave2} = gms3:start(slave2_id, Slave1),
+    {ok, Slave3} = gms3:start(slave3_id, Slave1),
 
     timer:sleep(1000),  % Allow time for group setup
 
     % Step 2: Kill Slave1 (the leader) and add Slave4, Slave2 becomes the new leader
-    io:format("Killing Slave1 (Leader1) and adding Slave4...~n"),
-    Leader1 ! stop,  % Kill the leader (Slave1)
+    io:format("Killing Slave1 (Leader1) and adding Slave4, 5, 6...~n"),
+    Slave1 ! stop,  % Kill the leader (Slave1)
     timer:sleep(2000),  % Allow time for Slave2 to become leader
 
     % Add Slave4 (new slave) after Slave1 is killed
@@ -35,3 +35,4 @@ test_leader_rotation() ->
     timer:sleep(2000),  % Allow time for Slave4 to become leader
 
     io:format("Slave4 has now become the leader, and all original slaves have been killed.~n").
+ 
