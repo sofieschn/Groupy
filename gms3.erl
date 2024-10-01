@@ -23,18 +23,9 @@ init_leader(Id, Rnd, Master) ->
 
 %%% Starting a node that joins an existing group (slave) %%%
 start(Id, Group) ->
-    %%Self = self(),
-    % Spawn a new application layer (Master) process for each joining node
-    Master = spawn(fun() -> application_process() end),
-    {ok, spawn_link(fun() -> init(Id, Group, Master) end)}.
+    Self = self(),
+    {ok, spawn_link(fun() -> init(Id, Group, Self) end)}.
 
-%% starts an application process for each started node. They all get unique processIDs
-application_process() ->
-    receive
-        % Handle messages from the group process
-        Message ->
-            application_process()
-    end.
 
 %%% Initialization for a joining node %%%
 init(Id, Grp, Master) ->
