@@ -122,7 +122,7 @@ worker(Id, Cast, Color, Gui, Sleep) ->
     after Wait ->
 	    %% Ok, let's propose a change of colors
 	    %% io:format("worker ~w mcast message~n", [Id]),
-	    Cast !  {mcast, {change, random:uniform(?change)}},
+	    Cast !  {mcast, {change, rand:uniform(?change)}},
 	    worker(Id, Cast, Color, Gui, Sleep)	    
     end.
 
@@ -146,7 +146,7 @@ wait(Sleep) ->
 	Sleep == 0 -> 
 	    0; 
 	true -> 
-	    random:uniform(Sleep) 
+	    rand:uniform(Sleep) 
     end.
 
 %% Change of color, we rotate RGB and add N. Since we also make a

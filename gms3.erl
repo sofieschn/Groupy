@@ -1,7 +1,7 @@
 % group membership service 2
 -module(gms3).
 -export([leader/5, broadcast/3, slave/7, start/1, init_leader/3, start/2, init/3, crash/1]).
-- define(arghh, 100000).
+- define(arghh, 1000).
 - define(timeout, 2000).
 
 %%%%% LEADER NODE START AND INIT %%%%%
@@ -175,7 +175,8 @@ election(Id, Master, MessageNumber, LastMessage, Slaves, Group) ->
            
          % Send the updated view to all slaves, ensuring it includes all existing nodes
             broadcast(Id, {view, MessageNumber, Slaves, Group}, Slaves),
-    
+            broadcast(Id,LastMessage , Slaves),
+
             % Inform the application layer (Master) about the new view
             Master ! {view, Group}, 
 
